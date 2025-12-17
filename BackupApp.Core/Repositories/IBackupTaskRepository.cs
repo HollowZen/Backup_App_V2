@@ -11,7 +11,10 @@ public interface IBackupTaskRepository
     Task UpdateAsync(BackupTask task, CancellationToken cancellationToken = default);
     Task DeleteAsync(int id, CancellationToken cancellationToken = default);
     Task UpdateLastRunAsync(int taskId, DateTime lastBackupTimeUtc, DateTime? lastFullBackupTimeUtc, CancellationToken cancellationToken = default);
+    Task AddHistoryAsync(BackupHistory history, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<BackupHistory>> GetHistoryForTaskAsync(int taskId, CancellationToken cancellationToken = default);
     Task DeleteHistoryAsync(int historyId, CancellationToken cancellationToken = default);
+    Task<bool> IsTaskNameUniqueAsync(string name, int? excludeTaskId = null, CancellationToken cancellationToken = default);
 }
 
 

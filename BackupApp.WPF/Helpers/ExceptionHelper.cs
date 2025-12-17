@@ -17,8 +17,14 @@ public static class ExceptionHelper
             ArgumentException argEx => $"Неверный параметр: {argEx.Message}",
             InvalidOperationException opEx => $"Операция не может быть выполнена: {opEx.Message}",
             UnauthorizedAccessException => "Недостаточно прав для выполнения операции.",
-            System.IO.DirectoryNotFoundException => "Папка не найдена.",
-            System.IO.FileNotFoundException => "Файл не найден.",
+            System.IO.DirectoryNotFoundException dirEx => 
+                string.IsNullOrWhiteSpace(dirEx.Message) 
+                    ? "Папка не найдена." 
+                    : dirEx.Message,
+            System.IO.FileNotFoundException fileEx => 
+                string.IsNullOrWhiteSpace(fileEx.Message) 
+                    ? "Файл не найден." 
+                    : fileEx.Message,
             System.IO.IOException ioEx => $"Ошибка ввода-вывода: {ioEx.Message}",
             _ => $"Произошла ошибка: {ex.Message}"
         };

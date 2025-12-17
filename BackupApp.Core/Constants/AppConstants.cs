@@ -16,6 +16,11 @@ public static class AppConstants
     public const int MinPasswordLength = 8;
 
     /// <summary>
+    /// Максимальная длина пароля шифрования
+    /// </summary>
+    public const int MaxPasswordLength = 128;
+
+    /// <summary>
     /// Максимальное количество записей в логе выполнения
     /// </summary>
     public const int MaxExecutionLogEntries = 50;

@@ -18,6 +18,7 @@
         <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
         <converters:ScheduleTypeToStringConverter x:Key="ScheduleTypeToStringConverter" />
         <converters:BackupTypeToStringConverter x:Key="BackupTypeToStringConverter" />
+        <converters:DateTimeToLocalConverter x:Key="DateTimeToLocalConverter" />
     </Window.Resources>
 
     <Grid>
@@ -290,7 +291,7 @@
                                                                FontWeight="SemiBold"
                                                                Foreground="Gray"
                                                                Margin="0,0,8,0" />
-                                                    <TextBlock Text="{Binding LastBackupTime, StringFormat={}{0:dd.MM.yyyy HH:mm}, TargetNullValue='Никогда'}"
+                                                    <TextBlock Text="{Binding LastBackupTime, Converter={StaticResource DateTimeToLocalConverter}, StringFormat={}{0:dd.MM.yyyy HH:mm}, TargetNullValue='Никогда'}"
                                                                Foreground="Black" />
                                                 </StackPanel>
                                             </Grid>
@@ -457,6 +458,52 @@ Padding="18">
                                                TextWrapping="Wrap"
                                    Foreground="Gray" />
                     </StackPanel>
+
+                    <Separator Margin="0,0,0,12" />
+
+                    <TextBlock Text="История запусков"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,8" />
+                    <Border BorderBrush="LightGray"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Background="#FAFAFA"
+                            Padding="6"
+                            MaxHeight="260">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding SelectedTaskHistory}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,6"
+                                                Padding="6"
+                                                Background="White"
+                                                CornerRadius="4"
+                                                BorderBrush="#E0E0E0"
+                                                BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding StartTime, Converter={StaticResource DateTimeToLocalConverter}, StringFormat='Старт: {0:dd.MM.yyyy HH:mm:ss}'}"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="#424242" />
+                                                <TextBlock Text="{Binding EndTime, Converter={StaticResource DateTimeToLocalConverter}, StringFormat='Окончание: {0:dd.MM.yyyy HH:mm:ss}', TargetNullValue='Окончание: —'}"
+                                                           Foreground="#616161" />
+                                                <TextBlock Text="{Binding BackupType}"
+                                                           Foreground="#757575"
+                                                           Margin="0,2,0,0" />
+                                                <TextBlock Text="{Binding Duration, StringFormat='Длительность: {0:g}'}"
+                                                           Foreground="#757575" />
+                                                <TextBlock Text="{Binding TotalSize, StringFormat='Объём: {0:N0} байт'}"
+                                                           Foreground="#757575" />
+                                                <TextBlock Text="{Binding OutputArtifactPath, TargetNullValue='Артефакт: —', StringFormat='Артефакт: {0}'}"
+                                                           Foreground="#9E9E9E"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
 
                             </StackPanel>
                         </ScrollViewer>

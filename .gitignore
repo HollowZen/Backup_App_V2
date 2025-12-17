@@ -3,3 +3,10 @@ obj/
 /packages/
 riderModule.iml
 /_ReSharper.Caches/
+# Local databases and temporary SQLite files
+*.db
+*.db-shm
+*.db-wal
+
+# IDE user settings
+*.DotSettings.user

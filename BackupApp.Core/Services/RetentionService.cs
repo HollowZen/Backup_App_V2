@@ -50,17 +50,27 @@ public class RetentionService : IRetentionService
         {
             try
             {
-                if (!string.IsNullOrEmpty(history.OutputArtifactPath) && File.Exists(history.OutputArtifactPath))
+                if (!string.IsNullOrEmpty(history.OutputArtifactPath))
                 {
-                    File.Delete(history.OutputArtifactPath);
-                    _logger.LogInformation("Deleted backup file: {Path}", history.OutputArtifactPath);
+                    var path = history.OutputArtifactPath;
+
+                    if (Directory.Exists(path))
+                {
+                        Directory.Delete(path, recursive: true);
+                        _logger.LogInformation("Deleted backup directory: {Path}", path);
+                    }
+                    else if (File.Exists(path))
+                    {
+                        File.Delete(path);
+                        _logger.LogInformation("Deleted backup file: {Path}", path);
+                    }
                 }
 
                 await _repository.DeleteHistoryAsync(history.Id, cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to delete backup file {Path} for task {TaskId}", history.OutputArtifactPath, taskId);
+                _logger.LogError(ex, "Failed to delete backup artifact {Path} for task {TaskId}", history.OutputArtifactPath, taskId);
             }
         }
 
@@ -71,7 +81,7 @@ public class RetentionService : IRetentionService
     public async Task<int> CountVersionsAsync(int taskId, CancellationToken cancellationToken = default)
     {
         var task = await _repository.GetByIdAsync(taskId, cancellationToken);
-        return task?.History.Count ?? 0;
+        return task?.History?.Count ?? 0;
     }
 
     public ICollection<BackupHistory> GetVersionsToDelete(IReadOnlyList<BackupHistory> histories, RetentionPolicyType policy, int? maxVersions, int? maxAgeDays)
