@@ -40,6 +40,7 @@ private bool _isBusy;
 
     public ObservableCollection<BackupTask> Tasks { get; } = new();
     public ObservableCollection<string> ExecutionLog { get; } = new();
+    public ObservableCollection<BackupHistory> SelectedTaskHistory { get; } = new();
 
     public BackupTask? SelectedTask
     {
@@ -49,6 +50,7 @@ private bool _isBusy;
             if (SetProperty(ref _selectedTask, value))
             {
                 RefreshCommands();
+                _ = LoadHistoryForSelectedTaskAsync();
                 // Если мы на вкладке "Задача", синхронизируем данные
                 if (SelectedTabIndex == 1 && value != null)
                 {
@@ -173,16 +175,24 @@ _messageService = messageService;
         _schedulerService.TaskStarted += (_, e) =>
 Notify($"Планировщик: запускаю '{e.Task.Name}' (в {e.ScheduledTime:HH:mm}).");
 
-        _schedulerService.TaskCompleted += (_, e) =>
-            ExecuteOnUi(() =>
+        _schedulerService.TaskCompleted += async (_, e) =>
+        {
+            await ExecuteOnUiAsync(async () =>
             {
                 Notify(e.IsSuccess
                     ? $"Планировщик: '{e.Task.Name}' выполнена."
-                   : $"Планировщик: ошибка при выполнении '{e.Task.Name}': {e.Error}");
+                    : $"Планировщик: ошибка при выполнении '{e.Task.Name}': {e.Error}");
 
                 if (e.IsSuccess && e.Result != null)
+                {
                     LogBackupSummary("Планировщик", e.Task, e.Result);
+                    
+                    // Обновляем задачи и историю после выполнения задачи через планировщик
+                    await ReloadTasksAsync();
+                    await LoadHistoryForSelectedTaskAsync();
+                }
             });
+        };
 }
 
     // ---------------- Initialization ---------------- //
@@ -216,6 +226,18 @@ Notify($"Планировщик: запускаю '{e.Task.Name}' (в {e.Schedul
     private void ExecuteOnUi(Action a)
     {
         if (_dispatcher.CheckAccess()) a(); else _dispatcher.Invoke(a);
+    }
+
+    private async Task ExecuteOnUiAsync(Func<Task> a)
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            await a();
+        }
+        else
+        {
+            await _dispatcher.InvokeAsync(a);
+        }
     }
 
    private void Notify(string msg, bool log = true)
@@ -311,6 +333,21 @@ return null;
         Notify($"Загружено задач: {Tasks.Count}.", false);
     }
 
+    private async Task LoadHistoryForSelectedTaskAsync()
+    {
+        SelectedTaskHistory.Clear();
+        if (SelectedTask == null)
+        {
+            return;
+        }
+
+        var history = await _repository.GetHistoryForTaskAsync(SelectedTask.Id, CancellationToken.None);
+        foreach (var item in history)
+        {
+            SelectedTaskHistory.Add(item);
+        }
+    }
+
     private void AddTask()
     {
         _isEditingTask = false;
@@ -372,6 +409,16 @@ return null;
 
         await ExecuteBusyAsync(async () =>
         {
+            var taskName = CurrentTaskViewModel.Name;
+            var excludeId = _isEditingTask && SelectedTask != null ? SelectedTask.Id : (int?)null;
+
+            // Проверяем уникальность имени задачи
+            if (!await _repository.IsTaskNameUniqueAsync(taskName, excludeId, CancellationToken.None))
+            {
+                Notify($"Задача с именем '{taskName}' уже существует. Выберите другое имя.");
+                return;
+            }
+
             if (_isEditingTask && SelectedTask != null)
             {
                 // Редактирование существующей задачи
@@ -384,10 +431,10 @@ return null;
                 // Создание новой задачи
                 var task = new BackupTask { CreatedDate = DateTime.UtcNow };
                 CurrentTaskViewModel.ApplyToTask(task);
-            await _repository.AddAsync(task, CancellationToken.None);
-           Tasks.Add(task);
+                await _repository.AddAsync(task, CancellationToken.None);
+                Tasks.Add(task);
                 SelectedTask = task;
-            Notify($"Задача '{task.Name}' добавлена.");
+                Notify($"Задача '{task.Name}' добавлена.");
             }
 
             await ReloadTasksAsync();
@@ -464,41 +511,89 @@ TransferSpeedText = "—";
         OnPropertyChanged(nameof(RemainingTimeText));
     }
 
-    private async Task RunTaskAsync() =>
-        await WithTaskAsync(async task =>
+    private async Task RunTaskAsync()
+    {
+        if (IsBackupInProgress || IsBusy)
         {
-           ResetBackupProgress(task.Name);
+            Notify("Задача уже выполняется. Пожалуйста, подождите.");
+            return;
+        }
+
+        await ExecuteBusyAsync(async () =>
+        {
+            var selected = RequireTask();
+            if (selected == null) return;
+
+            var taskId = selected.Id;
+            ResetBackupProgress(selected.Name);
             IsBackupInProgress = true;
 
             try
             {
-                Notify($"Выполнение '{task.Name}'...");
+                Notify($"Выполнение '{selected.Name}'...");
                 var progress = new Progress<BackupProgressReport>(UpdateBackupProgress);
 
-                var result = await _backupService.ExecuteBackupAsync(task, progress, CancellationToken.None);
+                // Получаем свежую задачу из БД
+                var freshTask = await _repository.GetByIdAsync(taskId, CancellationToken.None);
+                if (freshTask == null)
+                {
+                    Notify("Задача не найдена.");
+                    return;
+                }
+
+                var result = await _backupService.ExecuteBackupAsync(freshTask, progress, CancellationToken.None);
 
                 var moment = DateTime.UtcNow;
-                task.LastBackupTime = moment;
-               if (result.PerformedBackupType == BackupType.Full)
-                    task.LastFullBackupTime = moment;
+                var lastFull = result.PerformedBackupType == BackupType.Full ? moment : (DateTime?)null;
 
-                await _repository.UpdateLastRunAsync(task.Id, moment, task.LastFullBackupTime, CancellationToken.None);
-                await _retentionService.ApplyRetentionPolicyAsync(task.Id, CancellationToken.None);
+                await _repository.UpdateLastRunAsync(taskId, moment, lastFull, CancellationToken.None);
+                await _repository.AddHistoryAsync(new BackupHistory
+                {
+                    TaskId = taskId,
+                    StartTime = result.StartedAt,
+                    EndTime = result.CompletedAt,
+                    Status = BackupStatus.Success,
+                    BackupType = result.PerformedBackupType,
+                    UsedCompression = result.UsedCompression,
+                    CompressionLevel = result.CompressionLevel,
+                    FilesCopied = result.FilesCopied,
+                    TotalSize = result.TotalBytes,
+                    OutputArtifactPath = result.OutputArtifactPath,
+                    CompressedSize = result.BytesWritten,
+                    Duration = result.Duration
+                }, CancellationToken.None);
 
+                // Применяем политику хранения
+                await _retentionService.ApplyRetentionPolicyAsync(taskId, CancellationToken.None);
+
+                // Обновляем задачи и историю
                 await ReloadTasksAsync();
+                await LoadHistoryForSelectedTaskAsync();
 
-var next = _schedulerService.CalculateNextRun(task);
-                Notify(next == null
-                    ? $"Задача '{task.Name}' выполнена."
-                    : $"Задача '{task.Name}' выполнена. Следующий запуск: {next}.");
+                // Получаем обновленную задачу для расчета следующего запуска
+                var updatedTask = await _repository.GetByIdAsync(taskId, CancellationToken.None);
+                if (updatedTask != null)
+                {
+                    var next = _schedulerService.CalculateNextRun(updatedTask);
+                    Notify(next == null
+                        ? $"Задача '{updatedTask.Name}' выполнена."
+                        : $"Задача '{updatedTask.Name}' выполнена. Следующий запуск: {next.Value:dd.MM.yyyy HH:mm}.");
 
-                LogBackupSummary("Ручной запуск", task, result);
+                    LogBackupSummary("Ручной запуск", updatedTask, result);
+                }
+            }
+            catch (Exception ex)
+            {
+                var userMessage = ExceptionHelper.GetUserFriendlyMessage(ex);
+                Notify($"Ошибка при выполнении задачи: {userMessage}");
+                _messageService.ShowMessage(userMessage, "Ошибка выполнения задачи", MessageType.Error);
             }
             finally
             {
                 IsBackupInProgress = false;
             }
         });
+    }
 
 
    // ---------------- Scheduler ---------------- //

@@ -356,7 +356,13 @@ public class TaskViewModel : ObservableObject
 
             if (EncryptionPassword.Length < AppConstants.MinPasswordLength)
             {
-                ValidationError = $"Пароль шифрования должен содержать минимум {AppConstants.MinPasswordLength} символов.";
+                ValidationError = $"Пароль должен содержать минимум {AppConstants.MinPasswordLength} символов.";
+                return false;
+            }
+
+            if (EncryptionPassword.Length > AppConstants.MaxPasswordLength)
+            {
+                ValidationError = $"Пароль не должен превышать {AppConstants.MaxPasswordLength} символов.";
                 return false;
             }
         }

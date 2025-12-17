@@ -51,7 +51,10 @@ public class BackupAppDbContext : DbContext
             .HasMaxLength(100);
 
         entity.Property(t => t.CreatedDate)
-            .IsRequired();
+            .IsRequired()
+            .HasConversion(
+                v => v.ToUniversalTime(),
+                v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
 
         entity.Property(t => t.IsEnabled)
             .IsRequired();
@@ -65,8 +68,14 @@ public class BackupAppDbContext : DbContext
         entity.Property(t => t.CompressionLevel)
             .IsRequired();
 
-        entity.Property(t => t.LastBackupTime);
-        entity.Property(t => t.LastFullBackupTime);
+        entity.Property(t => t.LastBackupTime)
+            .HasConversion(
+                v => v.HasValue ? v.Value.ToUniversalTime() : (DateTime?)null,
+                v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : (DateTime?)null);
+        entity.Property(t => t.LastFullBackupTime)
+            .HasConversion(
+                v => v.HasValue ? v.Value.ToUniversalTime() : (DateTime?)null,
+                v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : (DateTime?)null);
         entity.Property(t => t.UseEncryption)
             .IsRequired();
         entity.Property(t => t.EncryptionPasswordHash)
@@ -104,6 +113,17 @@ public class BackupAppDbContext : DbContext
 
         entity.Property(h => h.Duration)
             .IsRequired();
+
+        entity.Property(h => h.StartTime)
+            .IsRequired()
+            .HasConversion(
+                v => v.ToUniversalTime(),
+                v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+        entity.Property(h => h.EndTime)
+            .HasConversion(
+                v => v.HasValue ? v.Value.ToUniversalTime() : (DateTime?)null,
+                v => v.HasValue ? DateTime.SpecifyKind(v.Value, DateTimeKind.Utc) : (DateTime?)null);
 
         entity.HasOne(h => h.Task)
             .WithMany(t => t.History)

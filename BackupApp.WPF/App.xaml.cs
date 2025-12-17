@@ -34,11 +34,6 @@ protected override void OnStartup(StartupEventArgs e)
         var dbContext = services.GetRequiredService<BackupAppDbContext>();
         dbContext.Database.Migrate();
 
-        // Простое ручное тестирование: создаём тестовую задачу, если БД пустая.
-        var repository = services.GetRequiredService<IBackupTaskRepository>();
-        // Используем ConfigureAwait(false) для избежания deadlock в синхронном контексте
-        DataSeeder.SeedAsync(repository).ConfigureAwait(false).GetAwaiter().GetResult();
-
         var mainWindow = services.GetRequiredService<MainWindow>();
         mainWindow.Show();
     }

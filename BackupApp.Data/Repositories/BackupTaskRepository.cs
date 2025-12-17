@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using BackupApp.Core.Models;
 using BackupApp.Core.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -85,6 +86,22 @@ public class BackupTaskRepository : IBackupTaskRepository
         _dbContext.Entry(existing).State = EntityState.Detached;
     }
 
+    public async Task AddHistoryAsync(BackupHistory history, CancellationToken cancellationToken = default)
+    {
+        await _dbContext.BackupHistories.AddAsync(history, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        _dbContext.Entry(history).State = EntityState.Detached;
+    }
+
+    public async Task<IReadOnlyList<BackupHistory>> GetHistoryForTaskAsync(int taskId, CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.BackupHistories
+            .AsNoTracking()
+            .Where(h => h.TaskId == taskId)
+            .OrderByDescending(h => h.StartTime)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task DeleteHistoryAsync(int historyId, CancellationToken cancellationToken = default)
     {
         var history = await _dbContext.BackupHistories.FindAsync(new object[] { historyId }, cancellationToken);
@@ -95,6 +112,28 @@ public class BackupTaskRepository : IBackupTaskRepository
 
         _dbContext.BackupHistories.Remove(history);
         await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> IsTaskNameUniqueAsync(string name, int? excludeTaskId = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        // Используем ToLower() для регистронезависимого сравнения, так как EF Core не поддерживает
+        // string.Equals с StringComparison в SQL запросах
+        var nameLower = name.ToLower();
+        var query = _dbContext.BackupTasks
+            .Where(t => t.Name.ToLower() == nameLower);
+
+        if (excludeTaskId.HasValue)
+        {
+            query = query.Where(t => t.Id != excludeTaskId.Value);
+        }
+
+        var exists = await query.AnyAsync(cancellationToken);
+        return !exists;
     }
 }
 

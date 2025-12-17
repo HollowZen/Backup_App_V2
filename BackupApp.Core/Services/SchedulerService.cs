@@ -233,6 +233,22 @@ public class SchedulerService : ISchedulerService, IDisposable
                     freshTask.LastFullBackupTime = lastFull;
                 }
 
+                await _repository.AddHistoryAsync(new BackupHistory
+                {
+                    TaskId = freshTask.Id,
+                    StartTime = result.StartedAt,
+                    EndTime = result.CompletedAt,
+                    Status = BackupStatus.Success,
+                    BackupType = result.PerformedBackupType,
+                    UsedCompression = result.UsedCompression,
+                    CompressionLevel = result.CompressionLevel,
+                    FilesCopied = result.FilesCopied,
+                    TotalSize = result.TotalBytes,
+                    OutputArtifactPath = result.OutputArtifactPath,
+                    CompressedSize = result.BytesWritten,
+                    Duration = result.Duration
+                }, token);
+
                 await _retentionService.ApplyRetentionPolicyAsync(freshTask.Id, token);
                 _lastRunByTask[task.Id] = scheduledTime;
                 PublishTaskEvent(TaskCompleted, freshTask, scheduledTime, isSuccess: true, result: result);
